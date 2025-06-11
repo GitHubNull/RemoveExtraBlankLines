@@ -6,6 +6,10 @@ on:
       - 'v*.*.*'  # 匹配版本标签，如 v1.0.0
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  contents: write  # 需要写权限来创建 release
+  packages: write  # 需要包权限
+  
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -21,7 +25,7 @@ jobs:
         distribution: 'temurin'
         
     - name: 缓存 Maven 依赖
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
@@ -39,8 +43,10 @@ jobs:
         VERSION=${{ steps.version.outputs.version }}
         # 移除 v 前缀
         VERSION_NUMBER=${VERSION#v}
-        mvn versions:set -DnewVersion=$VERSION_NUMBER
-        mvn versions:commit
+        echo "设置版本号为: $VERSION_NUMBER"
+        mvn versions:set -DnewVersion=$VERSION_NUMBER -DgenerateBackupPoms=false
+        echo "版本更新完成"
+        cat pom.xml | grep -A5 -B5 "<version>"
         
     - name: 编译和打包
       run: |
@@ -53,17 +59,33 @@ jobs:
       run: |
         echo "验证构建产物..."
         ls -la target/
-        if [ ! -f target/RemoveExtraBlankLines-*.jar ]; then
-          echo "错误: JAR 文件未生成"
+        VERSION_NUMBER=${{ steps.version.outputs.version }}
+        VERSION_NUMBER=${VERSION_NUMBER#v}
+        
+        # 检查主要 JAR 文件
+        JAR_FILE="target/RemoveExtraBlankLines-$VERSION_NUMBER.jar"
+        if [ ! -f "$JAR_FILE" ]; then
+          echo "错误: JAR 文件未生成: $JAR_FILE"
+          echo "查找所有生成的 JAR 文件:"
+          find target/ -name "*.jar" -type f
           exit 1
         fi
-        echo "构建产物验证成功"
+        echo "构建产物验证成功: $JAR_FILE"
         
     - name: 重命名构建产物
       run: |
         VERSION=${{ steps.version.outputs.version }}
         VERSION_NUMBER=${VERSION#v}
-        cp target/RemoveExtraBlankLines-$VERSION_NUMBER.jar target/RemoveExtraBlankLines-$VERSION.jar
+        SOURCE_JAR="target/RemoveExtraBlankLines-$VERSION_NUMBER.jar"
+        TARGET_JAR="target/RemoveExtraBlankLines-$VERSION.jar"
+        
+        if [ -f "$SOURCE_JAR" ]; then
+          cp "$SOURCE_JAR" "$TARGET_JAR"
+          echo "已创建带版本标签的文件: $TARGET_JAR"
+        else
+          echo "源文件不存在: $SOURCE_JAR"
+          exit 1
+        fi
         
     - name: 生成发布说明
       id: release_notes
@@ -97,38 +119,19 @@ jobs:
         如果您遇到任何问题，请在 [Issues](https://github.com/${{ github.repository }}/issues) 中提交反馈。
         EOF
         
-    - name: 创建 GitHub Release
-      uses: actions/create-release@v1
-      id: create_release
+    - name: 创建 GitHub Release 并上传文件
+      uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.version.outputs.version }}
-        release_name: Remove Extra Blank Lines ${{ steps.version.outputs.version }}
+        name: Remove Extra Blank Lines ${{ steps.version.outputs.version }}
         body_path: release_notes.md
         draft: false
         prerelease: false
-        
-    - name: 上传主要构建产物
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
-        asset_name: RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
-        asset_content_type: application/java-archive
-        
-    - name: 上传源码
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}-sources.jar
-        asset_name: RemoveExtraBlankLines-${{ steps.version.outputs.version }}-sources.jar
-        asset_content_type: application/java-archive
-      continue-on-error: true  # 源码包可能不存在，允许失败
+        files: |
+          target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
+          target/RemoveExtraBlankLines-*-sources.jar
       
     - name: 发布完成通知
       run: |
