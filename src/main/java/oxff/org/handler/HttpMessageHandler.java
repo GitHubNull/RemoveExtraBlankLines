@@ -16,6 +16,7 @@ import burp.api.montoya.logging.Logging;
 import oxff.org.config.PluginConfig;
 import oxff.org.processor.MessageProcessor;
 import oxff.org.util.ContentAnalyzer;
+import oxff.org.util.HttpProcessingResult;
 
 import static burp.api.montoya.http.handler.RequestToBeSentAction.continueWith;
 import static burp.api.montoya.http.handler.ResponseReceivedAction.continueWith;
@@ -28,6 +29,7 @@ import static burp.api.montoya.http.handler.ResponseReceivedAction.continueWith;
  * 主要功能：
  * - 拦截 HTTP 请求和响应
  * - 根据配置决定是否处理（模块控制、域名控制）
+ * - 优先检查HTTP头部Content-Type信息
  * - 委托给专门的处理器进行处理
  * - 记录处理结果和错误信息
  */
@@ -59,15 +61,15 @@ public class HttpMessageHandler implements HttpHandler {
                 return continueWith(requestToBeSent);
             }
             
-            HttpRequest processedRequest = messageProcessor.processRequest(requestToBeSent);
+            // 执行消息处理
+            HttpProcessingResult result = messageProcessor.processRequest(requestToBeSent);
             
-            // 如果请求被修改，返回修改后的请求
-            if (!requestToBeSent.toByteArray().equals(processedRequest.toByteArray())) {
+            if (result.wasModified()) {
                 logging.logToOutput("已清理请求中的多余空行: " + requestToBeSent.url());
-                return continueWith(processedRequest);
+                return continueWith(result.getProcessedRequest());
+            } else {
+                return continueWith(requestToBeSent);
             }
-            
-            return continueWith(requestToBeSent);
             
         } catch (Exception e) {
             logging.logToError("处理请求时出错: " + e.getMessage());
@@ -83,15 +85,15 @@ public class HttpMessageHandler implements HttpHandler {
                 return continueWith(responseReceived);
             }
             
-            HttpResponse processedResponse = messageProcessor.processResponse(responseReceived);
+            // 执行消息处理
+            HttpProcessingResult result = messageProcessor.processResponse(responseReceived);
             
-            // 如果响应被修改，返回修改后的响应
-            if (!responseReceived.toByteArray().equals(processedResponse.toByteArray())) {
-                logging.logToOutput("已清理响应中的多余空行");
-                return continueWith(processedResponse);
+            if (result.wasModified()) {
+                logging.logToOutput("已清理响应中的多余空行: " + responseReceived.initiatingRequest().url());
+                return continueWith(result.getProcessedResponse());
+            } else {
+                return continueWith(responseReceived);
             }
-            
-            return continueWith(responseReceived);
             
         } catch (Exception e) {
             logging.logToError("处理响应时出错: " + e.getMessage());
@@ -117,8 +119,8 @@ public class HttpMessageHandler implements HttpHandler {
                 return false;
             }
             
-            // 3. 检查消息内容是否适合处理
-            return shouldProcessMessage(requestToBeSent.toByteArray().getBytes());
+            // 3. 检查消息内容是否适合处理（优先使用Content-Type头部信息）
+            return shouldProcessHttpContent(requestToBeSent);
             
         } catch (Exception e) {
             logging.logToError("检查请求处理条件时出错: " + e.getMessage());
@@ -144,8 +146,8 @@ public class HttpMessageHandler implements HttpHandler {
                 return false;
             }
             
-            // 3. 检查消息内容是否适合处理
-            return shouldProcessMessage(responseReceived.toByteArray().getBytes());
+            // 3. 检查消息内容是否适合处理（优先使用Content-Type头部信息）
+            return shouldProcessHttpContent(responseReceived);
             
         } catch (Exception e) {
             logging.logToError("检查响应处理条件时出错: " + e.getMessage());
@@ -154,23 +156,45 @@ public class HttpMessageHandler implements HttpHandler {
     }
     
     /**
-     * 基于内容判断是否应该处理指定的消息
+     * 基于HTTP请求内容判断是否应该处理（优先检查Content-Type）
      * 
-     * @param messageBytes 消息字节数组
+     * @param request HTTP请求对象
      * @return 如果应该处理返回 true，否则返回 false
      */
-    private boolean shouldProcessMessage(byte[] messageBytes) {
+    private boolean shouldProcessHttpContent(HttpRequest request) {
         try {
-            // 如果消息太短或者是纯二进制内容，跳过处理
-            if (messageBytes.length < 10) {
+            // 如果消息太短，跳过处理
+            if (request.toByteArray().length() < 10) {
                 return false;
             }
             
-            // 使用内容分析器检查是否包含文本内容
-            return contentAnalyzer.containsTextContent(messageBytes);
+            // 使用内容分析器检查是否包含文本内容（优先检查Content-Type）
+            return contentAnalyzer.containsTextContent(request);
             
         } catch (Exception e) {
-            logging.logToError("检查消息内容时出错: " + e.getMessage());
+            logging.logToError("检查请求内容时出错: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 基于HTTP响应内容判断是否应该处理（优先检查Content-Type）
+     * 
+     * @param response HTTP响应对象
+     * @return 如果应该处理返回 true，否则返回 false
+     */
+    private boolean shouldProcessHttpContent(HttpResponse response) {
+        try {
+            // 如果消息太短，跳过处理
+            if (response.toByteArray().length() < 10) {
+                return false;
+            }
+            
+            // 使用内容分析器检查是否包含文本内容（优先检查Content-Type）
+            return contentAnalyzer.containsTextContent(response);
+            
+        } catch (Exception e) {
+            logging.logToError("检查响应内容时出错: " + e.getMessage());
             return false;
         }
     }

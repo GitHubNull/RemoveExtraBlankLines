@@ -150,7 +150,7 @@ graph TD
 
 ## 安装说明
 
-1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.1.jar`
+1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.2.jar`
 2. 打开 Burp Suite
 3. 转到 "Extensions" -> "Installed"
 4. 点击 "Add" 按钮
@@ -284,12 +284,14 @@ RemoveExtraBlankLines/
 │   │   └── SettingsPanel.java                # 图形化配置面板
 │   └── util/
 │       ├── ContentAnalyzer.java              # 内容分析器
-│       └── HttpMessageCleaner.java           # 消息清理器
+│       ├── HttpMessageCleaner.java           # 消息清理器
+│       ├── ProcessingResult.java             # 🆕 通用处理结果类
+│       └── HttpProcessingResult.java         # 🆕 HTTP消息处理结果类
 ├── pom.xml
 ├── README.md
 ├── TEST_CASES.md                             # 详细测试用例文档
 └── target/
-    └── RemoveExtraBlankLines-1.3.1.jar
+    └── RemoveExtraBlankLines-1.3.5.jar
 ```
 
 ## 注意事项
@@ -354,9 +356,37 @@ RemoveExtraBlankLines/
 ## 作者
 
 开发者：oxff.org
-项目版本：1.3.1
+项目版本：1.3.5
 
 ## 更新日志
+
+### v1.3.5 (2025-06-11)
+- 🏗️ **重大架构重构**：彻底移除所有内部类，实现清晰的代码结构
+- ✨ **独立类设计**：提取`ProcessingResult`和`HttpProcessingResult`为独立类
+- 🔧 **代码简化**：移除`HttpMessageCleaner.CleaningResult`和`MessageProcessor.HttpProcessingResult`内部类
+- 📦 **模块化改进**：所有处理结果类放在`util`包中，提高代码重用性
+- 🧹 **清理优化**：移除未使用的导入，减少代码冗余
+- 🎯 **设计一致性**：统一处理结果类的设计模式，提高代码可读性
+
+### v1.3.4 (2025-06-11)
+- 🐛 **紧急Bug修复**：修复Content-Length字段不匹配导致浏览器无法正常渲染的严重问题
+- 🔧 **HTTP协议修复**：使用Montoya API的`withBody()`方法自动更新Content-Length头部
+- ⚡ **处理优化**：只处理HTTP消息体部分，避免破坏头部信息
+- 🛡️ **协议完整性**：确保HTTP协议标准的完整性，避免Content-Length不匹配问题
+
+### v1.3.3 (2025-06-11)
+- 🔥 **重大ContentAnalyzer重构**：优先检查HTTP头部Content-Type，避免愚蠢的字节分析
+- 🎯 **智能Content-Type识别**：支持`text/plain; charset=utf-8`、`application/json`等直接认定为文本
+- ✅ **UTF-8中文字符修复**：移除错误的可打印字符占比计算，改用正确的UTF-8验证
+- 🚀 **性能大幅提升**：大部分情况下只需检查HTTP头部，无需字节分析
+- 💯 **逻辑缺陷修复**：移除"一个个比对字节"的低效算法，遵循HTTP协议标准
+
+### v1.3.2 (2025-06-11)
+- 🚀 **性能优化**：彻底优化HTTP消息比较机制，避免全量字节数组比较
+- ⚡ **执行效率提升**：在处理过程中使用修改标记，消除不必要的字节比较操作
+- 🔧 **架构改进**：新增ProcessingResult和CleaningResult类，提供更清晰的处理结果反馈
+- 💾 **内存优化**：减少大型HTTP消息处理时的内存占用和CPU开销
+- 🛠️ **代码重构**：移除低效的字节数组比较逻辑，改用智能标记机制
 
 ### v1.3.1 (2025-06-11)
 - 🐛 **紧急Bug修复**：修复了导致HTTP请求无法正常工作的严重问题

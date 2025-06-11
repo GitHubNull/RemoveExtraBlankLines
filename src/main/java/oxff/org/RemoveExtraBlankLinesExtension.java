@@ -10,12 +10,9 @@ package oxff.org;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.core.ToolType;
 import oxff.org.config.PluginConfig;
 import oxff.org.handler.HttpMessageHandler;
 import oxff.org.ui.SettingsPanel;
-
-import java.util.EnumSet;
 
 /**
  * Burp Suite 插件: 去除 HTTP 请求或响应报文头和体之间的多余空行

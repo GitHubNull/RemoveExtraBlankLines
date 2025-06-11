@@ -21,14 +21,14 @@ import java.util.List;
 public class HttpMessageCleaner {
     
     /**
-     * 移除字节数组开头的多余空行（仅处理字节级别的空行）
+     * 移除字节数组开头的多余空行并返回处理结果（仅处理字节级别的空行）
      * 
      * @param bytes 要处理的字节数组
-     * @return 清理后的字节数组
+     * @return 清理结果，包含处理后的字节数组和修改标记
      */
-    public byte[] removeLeadingBlankLines(byte[] bytes) {
+    public ProcessingResult removeLeadingBlankLinesWithResult(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
-            return bytes;
+            return new ProcessingResult(bytes, false);
         }
         
         int start = 0;
@@ -59,15 +59,29 @@ public class HttpMessageCleaner {
             }
         }
         
+        // 检查是否有修改
+        boolean modified = start > 0;
+        
         // 如果所有内容都是空行，返回单个换行符
         if (start >= bytes.length) {
-            return new byte[]{'\n'};
+            return new ProcessingResult(new byte[]{'\n'}, modified);
         }
         
         // 返回清理后的内容
         byte[] result = new byte[bytes.length - start];
         System.arraycopy(bytes, start, result, 0, result.length);
-        return result;
+        return new ProcessingResult(result, modified);
+    }
+    
+    /**
+     * 移除字节数组开头的多余空行（仅处理字节级别的空行）
+     * 
+     * @param bytes 要处理的字节数组
+     * @return 清理后的字节数组
+     */
+    public byte[] removeLeadingBlankLines(byte[] bytes) {
+        ProcessingResult result = removeLeadingBlankLinesWithResult(bytes);
+        return result.getProcessedBytes().getBytes();
     }
     
     /**
