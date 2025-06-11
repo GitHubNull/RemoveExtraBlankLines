@@ -1,0 +1,139 @@
+name: 自动发布 Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 匹配版本标签，如 v1.0.0
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置 Java 环境
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: 缓存 Maven 依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: 获取版本信息
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "发布版本: $VERSION"
+        
+    - name: 更新 pom.xml 版本
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        # 移除 v 前缀
+        VERSION_NUMBER=${VERSION#v}
+        mvn versions:set -DnewVersion=$VERSION_NUMBER
+        mvn versions:commit
+        
+    - name: 编译和打包
+      run: |
+        echo "开始编译项目..."
+        mvn clean compile
+        echo "开始打包项目..."
+        mvn package -DskipTests
+        
+    - name: 验证构建产物
+      run: |
+        echo "验证构建产物..."
+        ls -la target/
+        if [ ! -f target/RemoveExtraBlankLines-*.jar ]; then
+          echo "错误: JAR 文件未生成"
+          exit 1
+        fi
+        echo "构建产物验证成功"
+        
+    - name: 重命名构建产物
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        VERSION_NUMBER=${VERSION#v}
+        cp target/RemoveExtraBlankLines-$VERSION_NUMBER.jar target/RemoveExtraBlankLines-$VERSION.jar
+        
+    - name: 生成发布说明
+      id: release_notes
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        cat > release_notes.md << EOF
+        ## 🚀 Remove Extra Blank Lines v${VERSION#v}
+        
+        ### 📋 版本特性
+        - ✅ 智能二进制内容检测，避免破坏二进制数据
+        - ✅ 模块化架构设计，易于维护和扩展
+        - ✅ 支持多种字符编码和换行符格式
+        - ✅ 高性能处理，采用采样检测机制
+        - ✅ 全面的错误处理和日志记录
+        
+        ### 🛠️ 安装方法
+        1. 下载 \`RemoveExtraBlankLines-$VERSION.jar\`
+        2. 在 Burp Suite 中转到 Extensions -> Installed
+        3. 点击 Add，选择下载的 JAR 文件
+        4. 插件将自动加载并开始工作
+        
+        ### 📖 详细文档
+        请参阅项目的 [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) 和 [TEST_CASES.md](https://github.com/${{ github.repository }}/blob/main/TEST_CASES.md)
+        
+        ### 🔧 技术信息
+        - **Java 版本**: 17+
+        - **Burp Suite**: Community/Professional Edition
+        - **Montoya API**: 2023.12.1
+        
+        ### 🐛 问题反馈
+        如果您遇到任何问题，请在 [Issues](https://github.com/${{ github.repository }}/issues) 中提交反馈。
+        EOF
+        
+    - name: 创建 GitHub Release
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        release_name: Remove Extra Blank Lines ${{ steps.version.outputs.version }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        
+    - name: 上传主要构建产物
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
+        asset_name: RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
+        asset_content_type: application/java-archive
+        
+    - name: 上传源码
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}-sources.jar
+        asset_name: RemoveExtraBlankLines-${{ steps.version.outputs.version }}-sources.jar
+        asset_content_type: application/java-archive
+      continue-on-error: true  # 源码包可能不存在，允许失败
+      
+    - name: 发布完成通知
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        echo "🎉 发布完成!"
+        echo "版本: $VERSION"
+        echo "下载地址: https://github.com/${{ github.repository }}/releases/tag/$VERSION"
+        echo "构建时间: $(date)" 
