@@ -56,9 +56,12 @@ if ($diff) {
 Write-Host "Creating tag v$Version..." -ForegroundColor Blue
 git tag -a "v$Version" -m "Release version $Version"
 
+# Get current branch name
+$currentBranch = git branch --show-current
+
 # Push
 Write-Host "Pushing to GitHub..." -ForegroundColor Blue
-git push origin main
+git push origin $currentBranch
 git push origin "v$Version"
 
 Write-Host "Release complete!" -ForegroundColor Green 
