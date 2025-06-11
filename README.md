@@ -150,7 +150,7 @@ graph TD
 
 ## 安装说明
 
-1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.2.jar`
+1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.5.jar`
 2. 打开 Burp Suite
 3. 转到 "Extensions" -> "Installed"
 4. 点击 "Add" 按钮
