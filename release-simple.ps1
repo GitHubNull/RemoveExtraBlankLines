@@ -37,12 +37,12 @@ if ($confirm -ne "y") {
     exit 0
 }
 
-# Update README
+# Update README with proper UTF-8 encoding handling
 Write-Host "Updating README.md..." -ForegroundColor Blue
-$content = Get-Content "README.md" -Raw
+$content = Get-Content "README.md" -Raw -Encoding UTF8
 $content = $content -replace "RemoveExtraBlankLines-\d+\.\d+\.\d+\.jar", "RemoveExtraBlankLines-$Version.jar"
 $content = $content -replace "项目版本：\d+\.\d+\.\d+", "项目版本：$Version"
-Set-Content "README.md" $content -NoNewline
+Set-Content "README.md" $content -NoNewline -Encoding UTF8
 
 # Commit changes
 $diff = git diff --name-only README.md
