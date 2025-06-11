@@ -15,6 +15,71 @@
 - **高性能处理**：采用采样检测机制，避免处理大型二进制文件影响性能
 - **安全的错误处理**：出现错误时会返回原始消息，确保不会破坏正常的 HTTP 通信
 - **详细的日志记录**：在 Burp Suite 的输出面板中提供详细的处理日志
+- **🆕 模块生效控制**：可以选择性地在特定 Burp Suite 模块中启用插件功能
+- **🆕 目标域控制**：可以选择只对 Burp Suite 定义的目标域进行处理
+
+## 🎯 模块生效控制
+
+### 支持的模块
+
+插件支持对以下 Burp Suite 模块进行独立控制：
+
+- **Proxy**：代理模块，拦截浏览器流量
+- **Repeater**：重发器模块，用于重发和修改请求
+- **Intruder**：入侵者模块，用于自动化攻击测试
+- **Extensions**：扩展模块，来自其他扩展的请求
+
+### 默认配置
+
+- **默认行为**：插件默认在所有支持的模块中启用
+- **默认范围**：插件默认对所有域名生效（不限制目标域）
+
+### 配置示例
+
+```java
+// 示例1: 只在 Proxy 和 Repeater 模块中启用
+config.setEnabledModules(EnumSet.of(ToolType.PROXY, ToolType.REPEATER));
+
+// 示例2: 只对目标域生效
+config.setTargetScopeOnly(true);
+
+// 示例3: 禁用 Intruder 模块
+config.disableModule(ToolType.INTRUDER);
+
+// 示例4: 启用所有模块但只对目标域生效
+config.setEnabledModules(EnumSet.of(
+    ToolType.PROXY, 
+    ToolType.REPEATER, 
+    ToolType.INTRUDER, 
+    ToolType.EXTENSIONS
+));
+config.setTargetScopeOnly(true);
+```
+
+## 🌐 目标域控制
+
+### 功能说明
+
+插件可以配置为只对 Burp Suite 中定义的目标域进行处理：
+
+- **目标域模式**：只处理在 Burp Suite 目标范围内的域名
+- **全域模式**：处理所有通过 Burp Suite 的 HTTP 流量（默认）
+
+### 配置方法
+
+1. **在 Burp Suite 中设置目标域**：
+   - 转到 "Target" -> "Site map"
+   - 右键点击目标域，选择 "Add to scope"
+   - 或者在 "Target" -> "Scope" 中手动添加
+
+2. **启用目标域控制**：
+   ```java
+   config.setTargetScopeOnly(true);
+   ```
+
+3. **检查当前设置**：
+   - 插件会在 Extensions -> Output 面板中显示当前配置
+   - 显示格式：`作用范围: 仅Burp Suite目标域` 或 `作用范围: 所有域`
 
 ## 架构设计
 
@@ -23,18 +88,26 @@
 ```mermaid
 graph TD
     A["HTTP 请求/响应"] --> B["HttpMessageHandler"]
-    B --> C{"ContentAnalyzer<br/>内容分析"}
-    C -->|"文本内容"| D["MessageProcessor<br/>处理器"]
-    C -->|"二进制内容"| E["跳过处理<br/>返回原始消息"]
+    B --> C1{"模块检查<br/>Proxy/Repeater/Intruder/Extensions"}
+    C1 -->|"模块已启用"| C2{"目标域检查<br/>Scope过滤"}
+    C1 -->|"模块未启用"| E["跳过处理<br/>返回原始消息"]
+    C2 -->|"在目标范围内"| C3{"ContentAnalyzer<br/>内容分析"}
+    C2 -->|"不在目标范围内"| E
+    C3 -->|"文本内容"| D["MessageProcessor<br/>处理器"]
+    C3 -->|"二进制内容"| E
     D --> F["HttpMessageCleaner<br/>清理器"]
     F --> G["处理后的消息"]
     
-    C1["检测二进制文件魔数<br/>JPEG, PNG, PDF, ZIP等"]
-    C2["计算不可打印字符比例<br/>超过30%视为二进制"]
-    C3["检测NULL字节"]
-    C1 --> C
-    C2 --> C
-    C3 --> C
+    P1["PluginConfig<br/>配置管理器"]
+    P1 --> C1
+    P1 --> C2
+    
+    C31["检测二进制文件魔数<br/>JPEG, PNG, PDF, ZIP等"]
+    C32["计算不可打印字符比例<br/>超过30%视为二进制"]
+    C33["检测NULL字节"]
+    C31 --> C3
+    C32 --> C3
+    C33 --> C3
     
     F1["移除多余空行"]
     F2["保持HTTP协议格式"]
@@ -46,17 +119,21 @@ graph TD
     style A fill:#e1f5fe
     style G fill:#c8e6c9
     style E fill:#ffecb3
-    style C fill:#f3e5f5
+    style C1 fill:#fff3e0
+    style C2 fill:#f3e5f5
+    style C3 fill:#f3e5f5
     style D fill:#e8f5e8
     style F fill:#fff3e0
+    style P1 fill:#e8f5e8
 ```
 
 ### 模块职责
 
 | 模块 | 职责 | 主要功能 |
 |------|------|----------|
-| **RemoveExtraBlankLinesExtension** | 插件入口 | 初始化插件，注册处理器 |
-| **HttpMessageHandler** | HTTP消息拦截 | 拦截HTTP请求/响应，决定是否处理 |
+| **RemoveExtraBlankLinesExtension** | 插件入口 | 初始化插件，配置管理，注册处理器 |
+| **PluginConfig** | 配置管理 | 管理模块控制和目标域设置 |
+| **HttpMessageHandler** | HTTP消息拦截 | 拦截HTTP请求/响应，应用过滤规则 |
 | **ContentAnalyzer** | 内容分析 | 检测二进制内容，分析字符编码 |
 | **MessageProcessor** | 处理协调 | 协调处理流程，分离头部和正文 |
 | **HttpMessageCleaner** | 消息清理 | 执行实际的空行清理操作 |
@@ -67,11 +144,11 @@ graph TD
 - **API 版本**：Burp Suite Montoya API 2023.12.1
 - **构建工具**：Maven 3.x
 - **包名**：oxff.org.RemoveExtraBlankLinesExtension
-- **设计模式**：责任链模式、策略模式
+- **设计模式**：责任链模式、策略模式、配置模式
 
 ## 安装说明
 
-1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.0-SNAPSHOT.jar`
+1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.0.1.jar`
 2. 打开 Burp Suite
 3. 转到 "Extensions" -> "Installed"
 4. 点击 "Add" 按钮
@@ -81,11 +158,36 @@ graph TD
 
 ## 使用方法
 
+### 基本使用
+
 插件安装后会自动工作，无需额外配置：
 
 1. 插件会自动处理通过 Burp Suite 的所有 HTTP 请求和响应
 2. 当检测到多余空行时，会在 "Extensions" -> "Output" 面板中显示处理日志
 3. 处理后的消息会自动继续正常的 HTTP 流程
+
+### 高级配置
+
+如需自定义插件行为，可以修改源代码中的配置示例：
+
+1. 打开 `RemoveExtraBlankLinesExtension.java`
+2. 在 `demonstrateConfigUsage` 方法中取消注释相应的配置代码
+3. 重新编译和安装插件
+
+### 配置验证
+
+插件启动时会在 Extensions -> Output 面板显示当前配置：
+
+```
+Remove Extra Blank Lines 插件配置:
+启用的模块: [PROXY, REPEATER, INTRUDER, EXTENSIONS]
+作用范围: 所有域
+
+=== 配置功能演示 ===
+配置功能演示完成，当前使用默认配置
+可通过修改代码中的示例来测试不同配置
+===================
+```
 
 ## 处理示例
 
@@ -108,6 +210,27 @@ Host: example.com
 Content-Type: application/json
 
 {"key": "value"}
+```
+
+## 使用场景
+
+### 场景1: 只在代理模块使用
+```java
+// 只在浏览器流量中清理多余空行
+config.setEnabledModules(EnumSet.of(ToolType.PROXY));
+```
+
+### 场景2: 渗透测试专用
+```java
+// 只在手动测试工具中使用，避免影响自动化测试
+config.setEnabledModules(EnumSet.of(ToolType.REPEATER));
+config.setTargetScopeOnly(true);
+```
+
+### 场景3: 全面清理但限制目标
+```java
+// 所有模块都启用，但只处理特定目标
+config.setTargetScopeOnly(true);
 ```
 
 ## 开发和构建
@@ -133,6 +256,8 @@ mvn package
 RemoveExtraBlankLines/
 ├── src/main/java/oxff/org/
 │   ├── RemoveExtraBlankLinesExtension.java    # 主插件类
+│   ├── config/
+│   │   └── PluginConfig.java                  # 配置管理器
 │   ├── handler/
 │   │   └── HttpMessageHandler.java           # HTTP 消息处理器
 │   ├── processor/
@@ -144,7 +269,7 @@ RemoveExtraBlankLines/
 ├── README.md
 ├── TEST_CASES.md                             # 详细测试用例文档
 └── target/
-    └── RemoveExtraBlankLines-1.0-SNAPSHOT.jar
+    └── RemoveExtraBlankLines-1.0.1.jar
 ```
 
 ## 注意事项
@@ -153,6 +278,8 @@ RemoveExtraBlankLines/
 - 插件会保持 HTTP 协议的完整性，只移除多余的空行
 - 出现任何错误时，插件会返回原始消息以确保安全性
 - 插件的处理过程不会影响 Burp Suite 的其他功能
+- **模块控制**：可以根据需要选择性启用功能，避免影响不需要的模块
+- **目标域控制**：可以精确控制处理范围，提高处理效率
 
 ## 兼容性
 
@@ -207,4 +334,22 @@ RemoveExtraBlankLines/
 ## 作者
 
 开发者：oxff.org
-项目版本：1.0-SNAPSHOT 
+项目版本：1.0.1
+
+## 更新日志
+
+### v1.0.1 (2024-06-11)
+- 🆕 新增模块生效控制功能
+- 🆕 新增目标域控制功能
+- 🆕 新增配置管理器 (`PluginConfig`)
+- ✨ 支持选择性启用 Proxy、Repeater、Intruder、Extensions 模块
+- ✨ 支持基于 Burp Suite 目标范围的域名过滤
+- 📝 更新文档和架构图
+- 🔧 优化日志输出和配置显示
+
+### v1.0.0
+- 🎉 初始版本发布
+- ✨ 智能二进制检测功能
+- ✨ 自动清理多余空行功能
+- ✨ 支持混合内容处理
+- ✨ 模块化设计架构 
