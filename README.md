@@ -150,7 +150,7 @@ graph TD
 
 ## 安装说明
 
-1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.0.jar`
+1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.1.jar`
 2. 打开 Burp Suite
 3. 转到 "Extensions" -> "Installed"
 4. 点击 "Add" 按钮
@@ -289,7 +289,7 @@ RemoveExtraBlankLines/
 ├── README.md
 ├── TEST_CASES.md                             # 详细测试用例文档
 └── target/
-    └── RemoveExtraBlankLines-1.3.0.jar
+    └── RemoveExtraBlankLines-1.3.1.jar
 ```
 
 ## 注意事项
@@ -354,9 +354,15 @@ RemoveExtraBlankLines/
 ## 作者
 
 开发者：oxff.org
-项目版本：1.3.0
+项目版本：1.3.1
 
 ## 更新日志
+
+### v1.3.1 (2025-06-11)
+- 🐛 **紧急Bug修复**：修复了导致HTTP请求无法正常工作的严重问题
+- 🔧 **HTTP协议兼容性修复**：正确处理HTTP头部与正文之间的分隔符
+- ⚡ **稳定性改进**：确保插件只移除多余空行，不破坏HTTP协议格式
+- 🛡️ **数据完整性保护**：修复了可能导致请求/响应损坏的bug
 
 ### v1.3.0 (2025-06-11)
 - 🚀 **重大功能更新**：新增图形化配置界面，标志着插件进入全新的用户体验时代

@@ -76,30 +76,45 @@ public class MessageProcessor {
         try {
             byte[] bytes = messageBytes.getBytes();
             
-            // 查找 HTTP 头部结束位置
-            int headerEndPosition = findHeaderEndPosition(bytes);
-            if (headerEndPosition == -1) {
+            // 查找 HTTP 头部结束位置 (\r\n\r\n 或 \n\n)
+            int separatorStart = findSeparatorStart(bytes);
+            if (separatorStart == -1) {
                 // 没有找到头部结束标志，返回原始消息
                 return messageBytes;
             }
             
-            // 分离头部和正文
-            byte[] headerBytes = new byte[headerEndPosition];
-            System.arraycopy(bytes, 0, headerBytes, 0, headerEndPosition);
+            // 确定分隔符类型和长度
+            boolean isWindowsStyle = (separatorStart + 3 < bytes.length && 
+                bytes[separatorStart] == '\r' && bytes[separatorStart + 1] == '\n' &&
+                bytes[separatorStart + 2] == '\r' && bytes[separatorStart + 3] == '\n');
             
-            byte[] bodyBytes = new byte[bytes.length - headerEndPosition];
-            System.arraycopy(bytes, headerEndPosition, bodyBytes, 0, bodyBytes.length);
+            int separatorLength = isWindowsStyle ? 4 : 2;
+            int bodyStart = separatorStart + separatorLength;
             
-            // 检查正文是否包含文本内容
-            if (!contentAnalyzer.isSafeToProcessAsText(bodyBytes)) {
-                // 正文是二进制数据，只处理头部后的空行
-                byte[] cleanedBodyBytes = messageCleaner.removeLeadingBlankLines(bodyBytes);
-                return combineHeaderAndBody(headerBytes, cleanedBodyBytes);
+            // 分离头部、分隔符和正文
+            byte[] headerBytes = new byte[separatorStart];
+            System.arraycopy(bytes, 0, headerBytes, 0, separatorStart);
+            
+            if (bodyStart >= bytes.length) {
+                // 没有正文，直接返回原始消息
+                return messageBytes;
             }
             
-            // 正文是文本内容，可以安全处理
-            byte[] cleanedBodyBytes = messageCleaner.cleanTextContent(bodyBytes);
-            return combineHeaderAndBody(headerBytes, cleanedBodyBytes);
+            byte[] bodyBytes = new byte[bytes.length - bodyStart];
+            System.arraycopy(bytes, bodyStart, bodyBytes, 0, bodyBytes.length);
+            
+            // 移除正文开头的多余空行，但保留HTTP协议要求的分隔符
+            byte[] cleanedBodyBytes = messageCleaner.removeLeadingBlankLines(bodyBytes);
+            
+            // 重新组合消息：头部 + 标准分隔符 + 清理后的正文
+            byte[] separator = isWindowsStyle ? new byte[]{'\r', '\n', '\r', '\n'} : new byte[]{'\n', '\n'};
+            byte[] result = new byte[headerBytes.length + separator.length + cleanedBodyBytes.length];
+            
+            System.arraycopy(headerBytes, 0, result, 0, headerBytes.length);
+            System.arraycopy(separator, 0, result, headerBytes.length, separator.length);
+            System.arraycopy(cleanedBodyBytes, 0, result, headerBytes.length + separator.length, cleanedBodyBytes.length);
+            
+            return ByteArray.byteArray(result);
             
         } catch (Exception e) {
             logging.logToError("处理消息时出错: " + e.getMessage());
@@ -108,55 +123,28 @@ public class MessageProcessor {
     }
     
     /**
-     * 查找 HTTP 头部结束位置
+     * 查找 HTTP 头部与正文分隔符的开始位置
      * 
      * @param bytes 消息字节数组
-     * @return 头部结束位置，如果没有找到返回 -1
+     * @return 分隔符开始位置，如果没有找到返回 -1
      */
-    private int findHeaderEndPosition(byte[] bytes) {
-        // 查找 \r\n\r\n 或 \n\n
+    private int findSeparatorStart(byte[] bytes) {
+        // 查找 \r\n\r\n
         for (int i = 0; i < bytes.length - 3; i++) {
             if (bytes[i] == '\r' && bytes[i + 1] == '\n' && 
                 bytes[i + 2] == '\r' && bytes[i + 3] == '\n') {
-                return i + 4; // 返回正文开始位置
+                return i; // 返回分隔符开始位置
             }
         }
         
         // 查找 \n\n
         for (int i = 0; i < bytes.length - 1; i++) {
             if (bytes[i] == '\n' && bytes[i + 1] == '\n') {
-                return i + 2; // 返回正文开始位置
+                return i; // 返回分隔符开始位置
             }
         }
         
         return -1; // 没有找到头部结束标志
     }
-    
-    /**
-     * 组合头部和正文
-     * 
-     * @param headerBytes 头部字节数组
-     * @param bodyBytes 正文字节数组
-     * @return 组合后的消息字节数组
-     */
-    private ByteArray combineHeaderAndBody(byte[] headerBytes, byte[] bodyBytes) {
-        // 确保头部和正文之间有正确的分隔符
-        byte[] separatorBytes;
-        if (headerBytes.length >= 2 && 
-            headerBytes[headerBytes.length - 2] == '\r' && 
-            headerBytes[headerBytes.length - 1] == '\n') {
-            // 使用 Windows 风格的换行符
-            separatorBytes = new byte[]{'\r', '\n'};
-        } else {
-            // 使用 Unix 风格的换行符
-            separatorBytes = new byte[]{'\n'};
-        }
-        
-        byte[] result = new byte[headerBytes.length + separatorBytes.length + bodyBytes.length];
-        System.arraycopy(headerBytes, 0, result, 0, headerBytes.length);
-        System.arraycopy(separatorBytes, 0, result, headerBytes.length, separatorBytes.length);
-        System.arraycopy(bodyBytes, 0, result, headerBytes.length + separatorBytes.length, bodyBytes.length);
-        
-        return ByteArray.byteArray(result);
-    }
+
 } 
