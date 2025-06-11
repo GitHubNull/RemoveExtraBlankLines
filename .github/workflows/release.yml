@@ -17,6 +17,8 @@ jobs:
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整的git历史，用于生成发布说明
       
     - name: 设置 Java 环境
       uses: actions/setup-java@v4
@@ -86,38 +88,208 @@ jobs:
           echo "源文件不存在: $SOURCE_JAR"
           exit 1
         fi
+
+    - name: 获取上一个版本标签
+      id: prev_version
+      run: |
+        # 获取当前标签之前的最新标签
+        PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.version }}$" | head -n 1)
+        if [ -z "$PREV_TAG" ]; then
+          echo "prev_tag=" >> $GITHUB_OUTPUT
+          echo "这是第一个版本，没有前一个版本"
+        else
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "前一个版本: $PREV_TAG"
+        fi
+
+    - name: 提取README中的更新日志
+      id: changelog
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        VERSION_NUMBER=${VERSION#v}
         
-    - name: 生成发布说明
+        # 尝试从README.md中提取当前版本的更新日志
+        if grep -q "### v$VERSION_NUMBER" README.md; then
+          echo "从README.md中提取版本 $VERSION_NUMBER 的更新日志..."
+          
+          # 提取当前版本的更新内容
+          sed -n "/### v$VERSION_NUMBER/,/### v/p" README.md | head -n -1 > current_changelog.md
+          
+          # 如果文件不为空，使用它；否则使用默认内容
+          if [ -s current_changelog.md ]; then
+            echo "成功提取到更新日志"
+            cat current_changelog.md
+          else
+            echo "更新日志为空，将使用默认内容"
+            echo "" > current_changelog.md
+          fi
+        else
+          echo "在README.md中未找到版本 $VERSION_NUMBER 的更新日志"
+          echo "" > current_changelog.md
+        fi
+
+    - name: 获取Git提交历史
+      id: git_changes
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        PREV_TAG="${{ steps.prev_version.outputs.prev_tag }}"
+        
+        echo "## 📝 代码变更" > git_changes.md
+        
+        if [ -n "$PREV_TAG" ]; then
+          echo "获取从 $PREV_TAG 到 $VERSION 的提交历史..."
+          
+          # 获取提交历史，排除merge提交
+          git log --pretty=format:"- %s" --no-merges "$PREV_TAG..$VERSION" >> git_changes.md
+          
+          # 获取文件变更统计
+          echo -e "\n\n## 📊 变更统计" >> git_changes.md
+          CHANGED_FILES=$(git diff --name-only "$PREV_TAG..$VERSION" | wc -l)
+          ADDED_LINES=$(git diff --shortstat "$PREV_TAG..$VERSION" | grep -o '[0-9]* insertion' | grep -o '[0-9]*' || echo "0")
+          DELETED_LINES=$(git diff --shortstat "$PREV_TAG..$VERSION" | grep -o '[0-9]* deletion' | grep -o '[0-9]*' || echo "0")
+          
+          echo "- 📁 变更文件数: $CHANGED_FILES" >> git_changes.md
+          echo "- ➕ 新增代码行: $ADDED_LINES" >> git_changes.md  
+          echo "- ➖ 删除代码行: $DELETED_LINES" >> git_changes.md
+          
+          # 列出主要变更的文件
+          echo -e "\n## 🔄 主要变更文件" >> git_changes.md
+          git diff --name-only "$PREV_TAG..$VERSION" | head -10 | sed 's/^/- /' >> git_changes.md
+          
+        else
+          echo "- 🎉 初始版本发布" >> git_changes.md
+          echo "- ✨ 实现核心功能和架构" >> git_changes.md
+        fi
+        
+    - name: 分析代码特性
+      id: features
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        
+        echo "## 🎯 主要特性" > features.md
+        
+        # 分析Java文件，提取主要类和功能
+        echo "### 🏗️ 架构组件" >> features.md
+        find src/main/java -name "*.java" -type f | while read file; do
+          class_name=$(basename "$file" .java)
+          if grep -q "class $class_name" "$file"; then
+            # 提取类的注释说明
+            if grep -B5 "class $class_name" "$file" | grep -q "\*"; then
+              description=$(grep -B10 "class $class_name" "$file" | grep "^\s*\*" | grep -v "^\s*\*/" | head -1 | sed 's/^\s*\*\s*//')
+              if [ -n "$description" ]; then
+                echo "- **$class_name**: $description" >> features.md
+              else
+                echo "- **$class_name**: 核心组件" >> features.md
+              fi
+            else
+              echo "- **$class_name**: 核心组件" >> features.md
+            fi
+          fi
+        done
+        
+        # 分析配置和特性
+        echo -e "\n### ⚙️ 配置支持" >> features.md
+        if grep -q "PluginConfig" src/main/java/oxff/org/config/PluginConfig.java 2>/dev/null; then
+          echo "- 🎛️ 模块生效控制 (Proxy, Repeater, Intruder, Extensions)" >> features.md
+          echo "- 🌐 目标域控制 (基于Burp Suite目标范围)" >> features.md
+        fi
+        
+        # 分析二进制检测能力
+        if grep -q "BINARY_SIGNATURES" src/main/java/oxff/org/util/ContentAnalyzer.java 2>/dev/null; then
+          BINARY_TYPES=$(grep -c "// " src/main/java/oxff/org/util/ContentAnalyzer.java | head -1)
+          echo "- 🔍 智能二进制检测 (支持 $BINARY_TYPES+ 种文件格式)" >> features.md
+        fi
+        
+        echo "- 🚀 高性能处理和安全错误处理" >> features.md
+        echo "- 📝 详细的日志记录和配置验证" >> features.md
+        
+    - name: 生成动态发布说明
       id: release_notes
       run: |
         VERSION=${{ steps.version.outputs.version }}
+        VERSION_NUMBER=${VERSION#v}
+        
         cat > release_notes.md << EOF
-        ## 🚀 Remove Extra Blank Lines v${VERSION#v}
+        ## 🚀 Remove Extra Blank Lines $VERSION
         
-        ### 📋 版本特性
-        - ✅ 智能二进制内容检测，避免破坏二进制数据
-        - ✅ 模块化架构设计，易于维护和扩展
-        - ✅ 支持多种字符编码和换行符格式
-        - ✅ 高性能处理，采用采样检测机制
-        - ✅ 全面的错误处理和日志记录
+        > Burp Suite 插件 - 智能去除 HTTP 报文中的多余空行
         
-        ### 🛠️ 安装方法
-        1. 下载 \`RemoveExtraBlankLines-$VERSION.jar\`
-        2. 在 Burp Suite 中转到 Extensions -> Installed
-        3. 点击 Add，选择下载的 JAR 文件
-        4. 插件将自动加载并开始工作
+        ---
         
-        ### 📖 详细文档
-        请参阅项目的 [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) 和 [TEST_CASES.md](https://github.com/${{ github.repository }}/blob/main/TEST_CASES.md)
-        
-        ### 🔧 技术信息
-        - **Java 版本**: 17+
-        - **Burp Suite**: Community/Professional Edition
-        - **Montoya API**: 2023.12.1
-        
-        ### 🐛 问题反馈
-        如果您遇到任何问题，请在 [Issues](https://github.com/${{ github.repository }}/issues) 中提交反馈。
         EOF
+        
+        # 如果有README中的更新日志，使用它
+        if [ -s current_changelog.md ]; then
+          echo "### 🔄 版本更新" >> release_notes.md
+          cat current_changelog.md >> release_notes.md
+          echo "" >> release_notes.md
+        fi
+        
+        # 添加代码特性分析
+        cat features.md >> release_notes.md
+        echo "" >> release_notes.md
+        
+        # 添加Git变更历史
+        cat git_changes.md >> release_notes.md
+        echo "" >> release_notes.md
+        
+        cat >> release_notes.md << EOF
+        
+        ---
+        
+        ## 🛠️ 安装和使用
+        
+        ### 📦 快速安装
+        1. 下载 \`RemoveExtraBlankLines-$VERSION.jar\`
+        2. 在 Burp Suite 中: Extensions → Installed → Add
+        3. 选择下载的 JAR 文件，点击 Next
+        4. 插件自动加载并开始工作 ✅
+        
+        ### 📋 使用说明
+        - **默认行为**: 插件在所有模块中自动启用
+        - **配置控制**: 可通过修改代码自定义模块和域名控制
+        - **日志查看**: Extensions → Output 面板查看处理日志
+        
+        ## 📚 文档资源
+        
+        | 文档 | 描述 |
+        |------|------|
+        | [📖 README.md](https://github.com/${{ github.repository }}/blob/main/README.md) | 完整使用文档和特性说明 |
+        | [🧪 TEST_CASES.md](https://github.com/${{ github.repository }}/blob/main/TEST_CASES.md) | 详细测试用例和验证方法 |
+        | [⚙️ CONFIGURATION_GUIDE.md](https://github.com/${{ github.repository }}/blob/main/CONFIGURATION_GUIDE.md) | 高级配置指南 |
+        
+        ## 🔧 技术规格
+        
+        - **开发语言**: Java 17+
+        - **支持版本**: Burp Suite Community/Professional Edition
+        - **API依赖**: Montoya API 2023.12.1
+        - **构建工具**: Maven 3.x
+        - **兼容性**: Windows, macOS, Linux
+        
+        ## 🐛 问题反馈
+        
+        遇到问题？我们很乐意帮助！
+        - 🐞 [提交Bug报告](https://github.com/${{ github.repository }}/issues/new?template=bug_report.md)
+        - 💡 [功能建议](https://github.com/${{ github.repository }}/issues/new?template=feature_request.md)
+        - 💬 [讨论交流](https://github.com/${{ github.repository }}/discussions)
+        
+        ## 🙏 致谢
+        
+        感谢所有使用和反馈的用户！您的支持是我们持续改进的动力。
+        
+        ---
+        
+        **构建信息**
+        - 构建时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        - 构建环境: GitHub Actions
+        - Java版本: $(java -version 2>&1 | head -n 1)
+        EOF
+        
+        echo "✅ 动态发布说明生成完成"
+        echo "📄 发布说明预览:"
+        echo "===================="
+        head -20 release_notes.md
+        echo "===================="
         
     - name: 创建 GitHub Release 并上传文件
       uses: softprops/action-gh-release@v1
@@ -125,10 +297,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.version.outputs.version }}
-        name: Remove Extra Blank Lines ${{ steps.version.outputs.version }}
+        name: "🚀 Remove Extra Blank Lines ${{ steps.version.outputs.version }}"
         body_path: release_notes.md
         draft: false
         prerelease: false
+        generate_release_notes: false  # 禁用GitHub自动生成，使用我们的自定义内容
         files: |
           target/RemoveExtraBlankLines-${{ steps.version.outputs.version }}.jar
           target/RemoveExtraBlankLines-*-sources.jar
@@ -139,4 +312,9 @@ jobs:
         echo "🎉 发布完成!"
         echo "版本: $VERSION"
         echo "下载地址: https://github.com/${{ github.repository }}/releases/tag/$VERSION"
-        echo "构建时间: $(date)" 
+        echo "构建时间: $(date)"
+        echo ""
+        echo "📋 发布内容:"
+        echo "- JAR文件: RemoveExtraBlankLines-$VERSION.jar"
+        echo "- 源码包: RemoveExtraBlankLines-*-sources.jar"
+        echo "- 详细发布说明已自动生成" 
