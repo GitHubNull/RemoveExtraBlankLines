@@ -72,7 +72,6 @@ public class PluginConfig {
      */
     public void setEnabledModules(Set<ToolType> modules) {
         this.enabledModules = EnumSet.copyOf(modules);
-        logCurrentConfig();
     }
     
     /**
@@ -82,7 +81,6 @@ public class PluginConfig {
      */
     public void enableModule(ToolType toolType) {
         enabledModules.add(toolType);
-        logCurrentConfig();
     }
     
     /**
@@ -92,7 +90,6 @@ public class PluginConfig {
      */
     public void disableModule(ToolType toolType) {
         enabledModules.remove(toolType);
-        logCurrentConfig();
     }
     
     /**
@@ -134,7 +131,6 @@ public class PluginConfig {
      */
     public void setTargetScopeOnly(boolean targetScopeOnly) {
         this.targetScopeOnly = targetScopeOnly;
-        logCurrentConfig();
     }
     
     /**
@@ -161,7 +157,6 @@ public class PluginConfig {
     public void resetToDefaults() {
         this.enabledModules = EnumSet.copyOf(DEFAULT_ENABLED_MODULES);
         this.targetScopeOnly = false;
-        logCurrentConfig();
     }
     
     /**

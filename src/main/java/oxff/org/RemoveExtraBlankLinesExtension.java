@@ -13,6 +13,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.core.ToolType;
 import oxff.org.config.PluginConfig;
 import oxff.org.handler.HttpMessageHandler;
+import oxff.org.ui.SettingsPanel;
 
 import java.util.EnumSet;
 
@@ -48,43 +49,18 @@ public class RemoveExtraBlankLinesExtension implements BurpExtension {
         // 注册 HTTP 处理器，传入配置
         api.http().registerHttpHandler(new HttpMessageHandler(api, config));
         
+        // 创建并注册设置面板
+        SettingsPanel settingsPanel = new SettingsPanel(api, config);
+        api.userInterface().registerSuiteTab(settingsPanel.getTitle(), settingsPanel);
+        
         // 输出初始化日志
         api.logging().logToOutput("Remove Extra Blank Lines 插件已加载");
         api.logging().logToOutput("支持智能二进制检测和模块化设计");
         api.logging().logToOutput("支持模块生效控制和目标域控制");
+        api.logging().logToOutput("已注册图形化配置面板，可在主界面标签页中访问");
         
         // 输出当前配置信息
         api.logging().logToOutput(config.getConfigDescription());
-        
-        // 示例：演示如何动态修改配置（可注释掉或移除）
-        demonstrateConfigUsage(api);
-    }
-    
-    /**
-     * 演示配置功能的使用方法
-     * 在实际使用中，这些配置可以通过UI或其他方式进行修改
-     * 
-     * @param api Montoya API
-     */
-    private void demonstrateConfigUsage(MontoyaApi api) {
-        api.logging().logToOutput("\n=== 配置功能演示 ===");
-        
-        // 示例1: 只启用 Proxy 和 Repeater 模块
-        // config.setEnabledModules(EnumSet.of(ToolType.PROXY, ToolType.REPEATER));
-        
-        // 示例2: 只对目标域生效
-        // config.setTargetScopeOnly(true);
-        
-        // 示例3: 禁用 Intruder 模块
-        // config.disableModule(ToolType.INTRUDER);
-        
-        // 示例4: 启用所有模块但只对目标域生效
-        // config.setEnabledModules(EnumSet.of(ToolType.PROXY, ToolType.REPEATER, ToolType.INTRUDER, ToolType.EXTENSIONS));
-        // config.setTargetScopeOnly(true);
-        
-        api.logging().logToOutput("配置功能演示完成，当前使用默认配置");
-        api.logging().logToOutput("可通过修改代码中的示例来测试不同配置");
-        api.logging().logToOutput("===================\n");
     }
     
     /**

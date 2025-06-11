@@ -17,6 +17,7 @@
 - **详细的日志记录**：在 Burp Suite 的输出面板中提供详细的处理日志
 - **🆕 模块生效控制**：可以选择性地在特定 Burp Suite 模块中启用插件功能
 - **🆕 目标域控制**：可以选择只对 Burp Suite 定义的目标域进行处理
+- **🚀 图形化配置界面**：提供友好的配置面板，无需修改代码即可调整插件设置
 
 ## 🎯 模块生效控制
 
@@ -131,8 +132,9 @@ graph TD
 
 | 模块 | 职责 | 主要功能 |
 |------|------|----------|
-| **RemoveExtraBlankLinesExtension** | 插件入口 | 初始化插件，配置管理，注册处理器 |
+| **RemoveExtraBlankLinesExtension** | 插件入口 | 初始化插件，配置管理，注册处理器和UI界面 |
 | **PluginConfig** | 配置管理 | 管理模块控制和目标域设置 |
+| **SettingsPanel** | 图形化配置界面 | 提供用户友好的配置面板 |
 | **HttpMessageHandler** | HTTP消息拦截 | 拦截HTTP请求/响应，应用过滤规则 |
 | **ContentAnalyzer** | 内容分析 | 检测二进制内容，分析字符编码 |
 | **MessageProcessor** | 处理协调 | 协调处理流程，分离头部和正文 |
@@ -148,7 +150,7 @@ graph TD
 
 ## 安装说明
 
-1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.2.4.jar`
+1. 下载编译好的 JAR 文件：`target/RemoveExtraBlankLines-1.3.0.jar`
 2. 打开 Burp Suite
 3. 转到 "Extensions" -> "Installed"
 4. 点击 "Add" 按钮
@@ -166,27 +168,43 @@ graph TD
 2. 当检测到多余空行时，会在 "Extensions" -> "Output" 面板中显示处理日志
 3. 处理后的消息会自动继续正常的 HTTP 流程
 
-### 高级配置
+### 🎛️ 图形化配置
 
-如需自定义插件行为，可以修改源代码中的配置示例：
+插件提供了友好的图形化配置界面：
 
-1. 打开 `RemoveExtraBlankLinesExtension.java`
-2. 在 `demonstrateConfigUsage` 方法中取消注释相应的配置代码
-3. 重新编译和安装插件
+1. **访问配置面板**：
+   - 插件安装后，会在 Burp Suite 主界面增加一个 "Remove Extra Blank Lines" 标签页
+   - 点击该标签页即可访问配置界面
+
+2. **配置选项**：
+   - **模块生效控制**：选择插件在哪些 Burp Suite 模块中生效
+     - ☑️ Proxy (代理模块) - 拦截和修改浏览器与目标服务器之间的流量
+     - ☑️ Repeater (重发器) - 手动重发和修改HTTP请求
+     - ☑️ Intruder (入侵者) - 自动化的HTTP请求攻击测试
+     - ☑️ Extensions (扩展) - 来自其他扩展的HTTP请求
+   
+   - **目标域控制**：
+     - ☑️ 仅对Burp Suite目标域生效 - 只处理在Target->Scope中定义的目标域
+
+3. **操作按钮**：
+   - **应用设置** - 保存并应用当前配置
+   - **重置为默认** - 恢复插件默认设置
+
+4. **实时反馈**：
+   - 配置面板底部会显示操作状态和反馈信息
 
 ### 配置验证
 
 插件启动时会在 Extensions -> Output 面板显示当前配置：
 
 ```
+Remove Extra Blank Lines 插件已加载
+支持智能二进制检测和模块化设计
+支持模块生效控制和目标域控制
+已注册图形化配置面板，可在主界面标签页中访问
 Remove Extra Blank Lines 插件配置:
 启用的模块: [PROXY, REPEATER, INTRUDER, EXTENSIONS]
 作用范围: 所有域
-
-=== 配置功能演示 ===
-配置功能演示完成，当前使用默认配置
-可通过修改代码中的示例来测试不同配置
-===================
 ```
 
 ## 处理示例
@@ -262,6 +280,8 @@ RemoveExtraBlankLines/
 │   │   └── HttpMessageHandler.java           # HTTP 消息处理器
 │   ├── processor/
 │   │   └── MessageProcessor.java             # 消息处理器
+│   ├── ui/
+│   │   └── SettingsPanel.java                # 图形化配置面板
 │   └── util/
 │       ├── ContentAnalyzer.java              # 内容分析器
 │       └── HttpMessageCleaner.java           # 消息清理器
@@ -269,7 +289,7 @@ RemoveExtraBlankLines/
 ├── README.md
 ├── TEST_CASES.md                             # 详细测试用例文档
 └── target/
-    └── RemoveExtraBlankLines-1.2.4.jar
+    └── RemoveExtraBlankLines-1.3.0.jar
 ```
 
 ## 注意事项
@@ -334,9 +354,21 @@ RemoveExtraBlankLines/
 ## 作者
 
 开发者：oxff.org
-项目版本：1.2.4
+项目版本：1.3.0
 
 ## 更新日志
+
+### v1.3.0 (2025-06-11)
+- 🚀 **重大功能更新**：新增图形化配置界面，标志着插件进入全新的用户体验时代
+- ✨ **用户体验革命性改进**：彻底告别修改代码的配置方式，提供直观的GUI配置面板
+- 🎛️ **主界面集成**：在Burp Suite主界面添加"Remove Extra Blank Lines"配置标签页
+- 📱 **模块控制面板**：可视化选择插件在哪些模块中生效（Proxy/Repeater/Intruder/Extensions）
+- 🌐 **目标域控制面板**：图形化设置是否仅对Burp Suite目标域生效
+- ⚡ **实时配置应用**：配置更改立即生效，无需重启插件
+- 🔄 **操作反馈机制**：配置面板提供实时状态反馈和操作确认
+- 🎨 **友好交互设计**：包含"应用设置"和"重置为默认"按钮，支持操作撤销确认
+- 📝 **日志优化**：减少配置变更时的日志噪音，仅在用户主动操作时记录
+- 🏗️ **架构重构**：移除演示代码，简化插件初始化流程
 
 ### v1.2.4 (2025-06-11)
 - 🔧 **紧急修复**：彻底解决中文字符编码乱码问题
