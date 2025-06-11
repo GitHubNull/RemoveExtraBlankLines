@@ -269,7 +269,7 @@ RemoveExtraBlankLines/
 ├── README.md
 ├── TEST_CASES.md                             # 详细测试用例文档
 └── target/
-    └── RemoveExtraBlankLines-1.2.1.jar
+    └── RemoveExtraBlankLines-1.2.3.jar
 ```
 
 ## 注意事项
@@ -334,9 +334,17 @@ RemoveExtraBlankLines/
 ## 作者
 
 开发者：oxff.org
-项目版本：1.2.1
+项目版本：1.2.3
 
 ## 更新日志
+
+### v1.2.3 (2025-06-11)
+- 🔧 **修复文档编码问题**：解决README.md和TEST_CASES.md中的字符编码乱码问题
+- 📝 **文档质量提升**：确保所有中文文档正确显示
+- ✨ **稳定性改进**：优化文档的跨平台兼容性
+
+### v1.2.2 (2025-06-11)
+- 🐛 **Bug修复版本**：尝试修复文档编码问题（存在遗留问题）
 
 ### v1.2.1 (2025-06-11)
 - 🚀 **重大功能扩展**：二进制文件检测能力大幅提升
